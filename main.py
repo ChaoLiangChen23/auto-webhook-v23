@@ -136,5 +136,8 @@ def webhook():
     send_telegram(msg)
     return "✅ 訊號已廣播", 200
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
+import os  # ← 確保這行在檔案最上方或這邊加入
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+
