@@ -4,7 +4,7 @@ import requests
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from sheet_utils import write_to_sheet  # ✅ Google Sheet 寫入函式
+from sheet_utils import write_to_sheet
 
 load_dotenv()
 app = Flask(__name__)
@@ -36,15 +36,15 @@ def fetch_news_sentiment():
         r = requests.get(f"https://cryptopanic.com/api/v1/posts/?auth_token={token}&public=true")
         news = r.json().get("results", [])
         if not news:
-            return "中立"
+            return "Neutral"
         count = sum(1 for n in news[:10] if "bearish" in str(n).lower())
         if count >= 5:
-            return "偏空"
+            return "Bearish"
         elif count <= 2:
-            return "偏多"
-        return "中立"
+            return "Bullish"
+        return "Neutral"
     except:
-        return "中立"
+        return "Neutral"
 
 def send_telegram(msg):
     token = os.getenv("TG_BOT_TOKEN")
@@ -55,7 +55,7 @@ def send_telegram(msg):
         r = requests.post(url, data=payload)
         print("✅ Telegram response:", r.text)
     except Exception as e:
-        print("❌ 發送 Telegram 失敗：", str(e))
+        print("❌ Telegram failed:", str(e))
 
 @app.route("/webhook", methods=["POST", "HEAD"])
 def webhook():
@@ -64,105 +64,89 @@ def webhook():
 
     try:
         params = request.get_json()
-        print("✅ 接收到 TradingView 傳來的 JSON：")
-        print(json.dumps(params, indent=2, ensure_ascii=False))
+        print("✅ JSON received:")
+        print(json.dumps(params, indent=2))
     except Exception as e:
-        print("❌ JSON 解析失敗：", str(e))
-        return jsonify(error="JSON格式錯誤", detail=str(e)), 400
-
-    raw_symbol = params.get("幣種", "").upper()
-    if "USDT" in raw_symbol:
-        symbol = raw_symbol.replace("USDT", "")
-    elif raw_symbol.startswith("X:"):
-        symbol = raw_symbol.split(":")[1]
-    else:
-        symbol = raw_symbol
-    display_symbol = raw_symbol
-    direction = params.get("方向", "").upper()
+        print("❌ JSON decode error:", str(e))
+        return jsonify(error="JSON decode error", detail=str(e)), 400
 
     try:
-        tv_price = float(params.get("價格", 0))
-        ob_high = float(params.get("OB高點", 0))
-        ob_low = float(params.get("OB低點", 0))
-        atr = float(params.get("ATR", 0))
-        m5_slope = float(params.get("M5斜率", 0))
-        ma12_slope = float(params.get("M5_MA12斜率", 0))
+        symbol = params.get("symbol", "").upper().replace("USDT", "")
+        display_symbol = params.get("symbol", "").upper()
+        side = params.get("side", "").upper()
+        tv_price = float(params.get("price", 0))
+        ob_high = float(params.get("ob_high", 0))
+        ob_low = float(params.get("ob_low", 0))
+        atr = float(params.get("atr", 0))
+        m5_slope = float(params.get("m5_slope", 0))
+        ma12_slope = float(params.get("ma12_slope", 0))
     except Exception as e:
-        print("❌ 資料格式錯誤：", str(e))
-        return jsonify(error="資料格式錯誤", detail=str(e)), 400
+        return jsonify(error="Invalid parameter type", detail=str(e)), 400
 
     now_price, source = fetch_price(symbol)
-    print(f"📡 抓取現價：{now_price}（來源：{source}）")
     entry_price = now_price if now_price else tv_price
     if now_price is None:
-        price_note = "❗現價來源錯誤，使用TV價格"
+        price_note = "❗Using TV price (price fetch failed)"
     elif abs(now_price - tv_price) / tv_price > 0.005:
-        price_note = f"⚠️價格偏差 >0.5%，改用現價（{source}）"
+        price_note = f"⚠️ Price deviation >0.5%, using live price ({source})"
     else:
-        price_note = f"📡 價格來源：{source}"
+        price_note = f"📡 Price source: {source}"
 
     ob_range = abs(ob_high - ob_low)
     risk_R = ob_range + 2 * atr
-    print(f"📐 OB範圍：{ob_range}，ATR：{atr}，計算R：{risk_R}")
+    print(f"📐 OB Range: {ob_range}, ATR: {atr}, R: {risk_R}")
 
     if risk_R == 0:
-        print(f"❌ R 為 0，無法計算：ob_high={ob_high}, ob_low={ob_low}, atr={atr}")
-        return jsonify(error="R為0", message="OB高點與低點相同或ATR為0"), 400
+        return jsonify(error="R = 0", message="OB range and ATR both zero"), 400
 
-    tp1 = round(entry_price + risk_R, 2) if direction == "BUY" else round(entry_price - risk_R, 2)
-    tp2 = round(entry_price + risk_R * 2.0, 2) if direction == "BUY" else round(entry_price - risk_R * 2.0, 2)
-    tp3 = round(entry_price + risk_R * 3, 2) if direction == "BUY" else round(entry_price - risk_R * 3, 2)
-    tp4 = round(entry_price + risk_R * 4, 2) if direction == "BUY" else round(entry_price - risk_R * 4, 2)
-    sl = round(entry_price - risk_R, 2) if direction == "BUY" else round(entry_price + risk_R, 2)
-    rr = round((tp4 - entry_price) / risk_R if direction == "BUY" else (entry_price - tp4) / risk_R, 2)
+    tp1 = round(entry_price + risk_R, 2) if side == "BUY" else round(entry_price - risk_R, 2)
+    tp2 = round(entry_price + risk_R * 2.0, 2) if side == "BUY" else round(entry_price - risk_R * 2.0, 2)
+    tp3 = round(entry_price + risk_R * 3, 2) if side == "BUY" else round(entry_price - risk_R * 3, 2)
+    tp4 = round(entry_price + risk_R * 4, 2) if side == "BUY" else round(entry_price - risk_R * 4, 2)
+    sl = round(entry_price - risk_R, 2) if side == "BUY" else round(entry_price + risk_R, 2)
+    rr = round((tp4 - entry_price) / risk_R if side == "BUY" else (entry_price - tp4) / risk_R, 2)
 
     tw_time = datetime.utcnow() + timedelta(hours=8)
-    session = "亞洲盤" if 9 <= tw_time.hour < 17 else "歐洲盤" if 15 <= tw_time.hour < 23 else "紐約盤" if (tw_time.hour >= 21 or tw_time.hour < 5) else "其他"
+    session = "Asia" if 9 <= tw_time.hour < 17 else "Europe" if 15 <= tw_time.hour < 23 else "US" if (tw_time.hour >= 21 or tw_time.hour < 5) else "Other"
 
     valid = abs(m5_slope) >= 15 and abs(ma12_slope) >= 2
-    print(f"📊 斜率檢查：M5={m5_slope}、MA12={ma12_slope} → {'✅ 通過' if valid else '⛔ 不通過'}")
+    print(f"📊 Slope check: M5={m5_slope}, MA12={ma12_slope} → {'PASS' if valid else 'FAIL'}")
     if not valid:
-        return jsonify(error="不符合條件", m5_slope=m5_slope, ma12_slope=ma12_slope), 200
+        return jsonify(error="Slope check failed", m5_slope=m5_slope, ma12_slope=ma12_slope), 200
 
     news = fetch_news_sentiment()
-    msg = f"""🕒 <b>{tw_time.strftime('%Y-%m-%d %H:%M:%S')}（{session}）</b>
-🚀 <b>{"多單" if direction == "BUY" else "空單"}</b>
-📉 幣種：{display_symbol}
-💰 進場價：{entry_price:.2f}
+    msg = f"""🕒 <b>{tw_time.strftime('%Y-%m-%d %H:%M:%S')} ({session})</b>
+🚀 <b>{'Long' if side == "BUY" else "Short"}</b>
+📉 Symbol: {display_symbol}
+💰 Entry: {entry_price:.2f}
 {price_note}
-🎯 止盈：TP1 {tp1} / TP2 {tp2} / TP3 {tp3} / TP4 {tp4}
-🛑 止損：{sl}
-⚖️ 盈虧比：{rr}:1
-📈 趨勢方向：{direction}
-📊 勝率條件：≥70%
-🧠 技術依據：
-- M5 實體穿越 MA12
-- M5 MA12 斜率 ≥ ±2°
-- M1 MA5 斜率 ≥ ±15°
-- OB 觸發 + R = OB差 + 2×ATR
-- H1 價格與 MA365 趨勢同向
-📰 新聞情緒：{news}
-🔖 GPT-CORE (V23)
+🎯 TP: TP1 {tp1} / TP2 {tp2} / TP3 {tp3} / TP4 {tp4}
+🛑 SL: {sl}
+⚖️ RR: {rr}:1
+📈 Trend: {side}
+📊 Conditions: Slope + OB + MA filter
+📰 Sentiment: {news}
+🔖 GPT-CORE (V23-en)
 """
     send_telegram(msg)
 
     row_data = [
         tw_time.strftime("%Y-%m-%d %H:%M:%S"),
         display_symbol,
-        direction,
-        price_note.replace("📡 ", "").replace("⚠️", "").replace("❗", ""),
+        side,
+        price_note,
         round(entry_price, 2),
         sl, tp1, tp2, tp3, tp4,
         rr,
-        "M5穿越MA12 + 斜率判斷 + OB觸發 + H1方向",
+        "Slope + OB + MA filter",
         news,
-        "",  # result
+        "",
         session
     ]
     write_to_sheet(row_data)
 
-    print("✅ 廣播與紀錄完成")
-    return jsonify(status="ok", message="✅ 訊號已廣播並記錄"), 200
+    print("✅ Broadcast + logging complete.")
+    return jsonify(status="ok", message="Broadcast complete"), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
