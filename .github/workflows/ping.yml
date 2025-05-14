@@ -1,0 +1,25 @@
+name: BingX Keep Alive
+
+on:
+  schedule:
+    - cron: '0 */12 * * *'  # 每 12 小時執行一次
+  workflow_dispatch:        # 可手動執行
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+
+    - name: Run keep_alive script
+      run: python keep_alive.py
