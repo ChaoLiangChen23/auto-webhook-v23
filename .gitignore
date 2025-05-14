@@ -1,0 +1,5 @@
+# 忽略 .env 文件
+.env
+
+# 忽略 Google Sheets API 金鑰
+config/webhook-gsheet-0cddc63f4d59.json
