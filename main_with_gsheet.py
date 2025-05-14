@@ -126,7 +126,7 @@ def webhook():
 
     news = fetch_news_sentiment()
     msg = f"""🕒 <b>{tw_time.strftime('%Y-%m-%d %H:%M:%S')}（{session}）</b>
-🚀 <b>{"多單" if direction == "BUY" else "空單"}</b>
+🚀 <b>{'多單' if direction == 'BUY' else '空單'}</b>
 📉 幣種：{display_symbol}
 💰 進場價：{entry_price:.2f}
 {price_note}
@@ -146,19 +146,17 @@ def webhook():
 """
     send_telegram(msg)
 
-    # ✅ 寫入 Google Sheet
     row_data = [
         tw_time.strftime("%Y-%m-%d %H:%M:%S"),
         display_symbol,
         direction,
         price_note.replace("📡 ", "").replace("⚠️", "").replace("❗", ""),
-        round(entry_price, 2),
-        sl, tp1, tp2, tp3, tp4,
+        round(entry_price, 2), sl, tp1, tp2, tp3, tp4,
         rr,
         "M5穿越MA12 + 斜率判斷 + OB觸發 + H1方向",
         news,
-        "",         # result 空欄
-        session     # 盤別
+        "",
+        session
     ]
     write_to_sheet(row_data)
 
