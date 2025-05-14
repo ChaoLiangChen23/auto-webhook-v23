@@ -1,11 +1,10 @@
-
 import os
 import json
 import requests
 from flask import Flask, request
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from sheet_utils import write_to_sheet  # ✅ 新增引用
+from sheet_utils import write_to_sheet  # ✅ 引用寫入 Google Sheet 函數
 
 load_dotenv()
 app = Flask(__name__)
@@ -138,23 +137,20 @@ def webhook():
     send_telegram(msg)
 
     # ✅ 寫入 Google Sheet
-    row_data = {
-        "symbol": display_symbol,
-        "direction": direction,
-        "price_note": price_note,
-        "entry_price": entry_price,
-        "sl": sl,
-        "tp1": tp1,
-        "tp2": tp2,
-        "tp3": tp3,
-        "tp4": tp4,
-        "rr": rr,
-        "tech_reason": "M5穿越MA12 + 斜率判斷 + OB觸發 + H1方向",
-        "news_sentiment": news,
-        "result": "",  # 後續補上結果
-        "session": session
-    }
-    write_to_sheet("webhook-gsheet-0cddc63f4d59.json", row_data)
+    row_data = [
+        tw_time.strftime("%Y-%m-%d %H:%M:%S"),
+        display_symbol,
+        direction,
+        price_note.replace("📡 ", "").replace("⚠️", "").replace("❗", ""),
+        round(entry_price, 2),
+        sl, tp1, tp2, tp3, tp4,
+        rr,
+        "M5穿越MA12 + 斜率判斷 + OB觸發 + H1方向",
+        news,
+        "",         # result 空欄
+        session     # 盤別
+    ]
+    write_to_sheet(row_data)
 
     return "✅ 訊號已廣播並記錄", 200
 
