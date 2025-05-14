@@ -1,10 +1,10 @@
 import os
 import json
 import requests
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from sheet_utils import write_to_sheet  # ✅ 引用寫入 Google Sheet 函數
+from sheet_utils import write_to_sheet  # ✅ Google Sheet 寫入函式
 
 load_dotenv()
 app = Flask(__name__)
@@ -68,7 +68,7 @@ def webhook():
         print(json.dumps(params, indent=2, ensure_ascii=False))
     except Exception as e:
         print("❌ JSON 解析失敗：", str(e))
-        return f"JSON格式錯誤: {str(e)}", 400
+        return jsonify(error="JSON格式錯誤", detail=str(e)), 400
 
     raw_symbol = params.get("幣種", "").upper()
     if "USDT" in raw_symbol:
@@ -89,7 +89,7 @@ def webhook():
         ma12_slope = float(params.get("M5_MA12斜率", 0))
     except Exception as e:
         print("❌ 資料格式錯誤：", str(e))
-        return "❌ 資料格式錯誤", 400
+        return jsonify(error="資料格式錯誤", detail=str(e)), 400
 
     now_price, source = fetch_price(symbol)
     print(f"📡 抓取現價：{now_price}（來源：{source}）")
@@ -107,7 +107,7 @@ def webhook():
 
     if risk_R == 0:
         print(f"❌ R 為 0，無法計算：ob_high={ob_high}, ob_low={ob_low}, atr={atr}")
-        return f"❌ R 為 0，無法計算，可能原因：OB 高低點相等或 ATR 為 0", 400
+        return jsonify(error="R為0", message="OB高點與低點相同或ATR為0"), 400
 
     tp1 = round(entry_price + risk_R, 2) if direction == "BUY" else round(entry_price - risk_R, 2)
     tp2 = round(entry_price + risk_R * 2.0, 2) if direction == "BUY" else round(entry_price - risk_R * 2.0, 2)
@@ -122,11 +122,11 @@ def webhook():
     valid = abs(m5_slope) >= 15 and abs(ma12_slope) >= 2
     print(f"📊 斜率檢查：M5={m5_slope}、MA12={ma12_slope} → {'✅ 通過' if valid else '⛔ 不通過'}")
     if not valid:
-        return "⛔ 不符合條件", 200
+        return jsonify(error="不符合條件", m5_slope=m5_slope, ma12_slope=ma12_slope), 200
 
     news = fetch_news_sentiment()
     msg = f"""🕒 <b>{tw_time.strftime('%Y-%m-%d %H:%M:%S')}（{session}）</b>
-🚀 <b>{'多單' if direction == 'BUY' else '空單'}</b>
+🚀 <b>{"多單" if direction == "BUY" else "空單"}</b>
 📉 幣種：{display_symbol}
 💰 進場價：{entry_price:.2f}
 {price_note}
@@ -151,17 +151,18 @@ def webhook():
         display_symbol,
         direction,
         price_note.replace("📡 ", "").replace("⚠️", "").replace("❗", ""),
-        round(entry_price, 2), sl, tp1, tp2, tp3, tp4,
+        round(entry_price, 2),
+        sl, tp1, tp2, tp3, tp4,
         rr,
         "M5穿越MA12 + 斜率判斷 + OB觸發 + H1方向",
         news,
-        "",
+        "",  # result
         session
     ]
     write_to_sheet(row_data)
 
     print("✅ 廣播與紀錄完成")
-    return "✅ 訊號已廣播並記錄", 200
+    return jsonify(status="ok", message="✅ 訊號已廣播並記錄"), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
