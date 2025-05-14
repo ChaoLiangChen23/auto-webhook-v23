@@ -4,7 +4,7 @@ import requests
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from sheet_utils import write_to_sheet
+from sheet_utils import write_to_sheet  # ✅ 你已設定的 Google Sheet 寫入模組
 
 load_dotenv()
 app = Flask(__name__)
@@ -65,9 +65,22 @@ def webhook():
     try:
         params = request.get_json()
         print("✅ 接收到 JSON：")
-        print(json.dumps(params, indent=2))
+        print(json.dumps(params, indent=2, ensure_ascii=False))
     except Exception as e:
         return jsonify(error="JSON decode error", detail=str(e)), 400
+
+    # ✅ 中文欄位自動轉換成英文 key
+    if "幣種" in params:
+        params = {
+            "symbol": params.get("幣種"),
+            "price": float(params.get("價格", 0)),
+            "side": params.get("方向", "").upper(),
+            "ob_high": float(params.get("OB高點", 0)),
+            "ob_low": float(params.get("OB低點", 0)),
+            "atr": float(params.get("ATR", 0)),
+            "m5_slope": float(params.get("M5斜率", 0)),
+            "ma12_slope": float(params.get("M5_MA12斜率", 0))
+        }
 
     try:
         symbol = params.get("symbol", "").upper().replace("USDT", "")
@@ -111,7 +124,6 @@ def webhook():
         return jsonify(error="不符合斜率條件", m5=m5_slope, ma12=ma12_slope), 200
 
     news = fetch_news_sentiment()
-
     msg = f"""🕒 <b>{tw_time.strftime('%Y-%m-%d %H:%M:%S')}（{session}）</b>
 🚀 <b>{"多單" if side == "BUY" else "空單"}</b>
 📉 幣種：{display_symbol}
@@ -133,6 +145,7 @@ def webhook():
 """
     send_telegram(msg)
 
+    # ✅ 寫入 Google Sheet
     row = [
         tw_time.strftime("%Y-%m-%d %H:%M:%S"),
         display_symbol,
@@ -143,7 +156,7 @@ def webhook():
         rr,
         "斜率+OB+H1趨勢",
         news,
-        "",
+        "",         # 結果暫留空白
         session
     ]
     write_to_sheet(row)
@@ -151,4 +164,4 @@ def webhook():
     return jsonify(status="ok", message="✅ 廣播完成"), 200
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
