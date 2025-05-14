@@ -51,7 +51,11 @@ def send_telegram(msg):
     chat_id = os.getenv("TG_CHAT_ID")
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}
-    requests.post(url, data=payload)
+    try:
+        r = requests.post(url, data=payload)
+        print("✅ Telegram response:", r.text)
+    except Exception as e:
+        print("❌ 發送 Telegram 失敗：", str(e))
 
 @app.route("/webhook", methods=["POST", "HEAD"])
 def webhook():
@@ -83,10 +87,12 @@ def webhook():
         atr = float(params.get("ATR", 0))
         m5_slope = float(params.get("M5斜率", 0))
         ma12_slope = float(params.get("M5_MA12斜率", 0))
-    except:
+    except Exception as e:
+        print("❌ 資料格式錯誤：", str(e))
         return "❌ 資料格式錯誤", 400
 
     now_price, source = fetch_price(symbol)
+    print(f"📡 抓取現價：{now_price}（來源：{source}）")
     entry_price = now_price if now_price else tv_price
     if now_price is None:
         price_note = "❗現價來源錯誤，使用TV價格"
@@ -97,8 +103,11 @@ def webhook():
 
     ob_range = abs(ob_high - ob_low)
     risk_R = ob_range + 2 * atr
+    print(f"📐 OB範圍：{ob_range}，ATR：{atr}，計算R：{risk_R}")
+
     if risk_R == 0:
-        return "❌ R 為 0，無法計算", 400
+        print(f"❌ R 為 0，無法計算：ob_high={ob_high}, ob_low={ob_low}, atr={atr}")
+        return f"❌ R 為 0，無法計算，可能原因：OB 高低點相等或 ATR 為 0", 400
 
     tp1 = round(entry_price + risk_R, 2) if direction == "BUY" else round(entry_price - risk_R, 2)
     tp2 = round(entry_price + risk_R * 2.0, 2) if direction == "BUY" else round(entry_price - risk_R * 2.0, 2)
@@ -111,6 +120,7 @@ def webhook():
     session = "亞洲盤" if 9 <= tw_time.hour < 17 else "歐洲盤" if 15 <= tw_time.hour < 23 else "紐約盤" if (tw_time.hour >= 21 or tw_time.hour < 5) else "其他"
 
     valid = abs(m5_slope) >= 15 and abs(ma12_slope) >= 2
+    print(f"📊 斜率檢查：M5={m5_slope}、MA12={ma12_slope} → {'✅ 通過' if valid else '⛔ 不通過'}")
     if not valid:
         return "⛔ 不符合條件", 200
 
@@ -152,6 +162,7 @@ def webhook():
     ]
     write_to_sheet(row_data)
 
+    print("✅ 廣播與紀錄完成")
     return "✅ 訊號已廣播並記錄", 200
 
 if __name__ == '__main__':
