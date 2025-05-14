@@ -67,19 +67,19 @@ def webhook():
         print("✅ 接收到 JSON：")
         print(json.dumps(params, indent=2, ensure_ascii=False))
     except Exception as e:
-        return jsonify(error="JSON decode error", detail=str(e)), 400
+        return jsonify(error="JSON decode error", detail=str(e), raw=request.data.decode()), 400
 
-    # ✅ 中文欄位自動轉換成英文 key
+    # ✅ 中文欄位轉英文 key，並加上防呆處理
     if "幣種" in params:
         params = {
             "symbol": params.get("幣種"),
-            "price": float(params.get("價格", 0)),
+            "price": float(params.get("價格", 0) or 0),
             "side": params.get("方向", "").upper(),
-            "ob_high": float(params.get("OB高點", 0)),
-            "ob_low": float(params.get("OB低點", 0)),
-            "atr": float(params.get("ATR", 0)),
-            "m5_slope": float(params.get("M5斜率", 0)),
-            "ma12_slope": float(params.get("M5_MA12斜率", 0))
+            "ob_high": float(params.get("OB高點", 0) or 0),
+            "ob_low": float(params.get("OB低點", 0) or 0),
+            "atr": float(params.get("ATR", 0) or 0),
+            "m5_slope": float(params.get("M5斜率", 0) or 0),
+            "ma12_slope": float(params.get("M5_MA12斜率", 0) or 0)
         }
 
     try:
@@ -145,7 +145,6 @@ def webhook():
 """
     send_telegram(msg)
 
-    # ✅ 寫入 Google Sheet
     row = [
         tw_time.strftime("%Y-%m-%d %H:%M:%S"),
         display_symbol,
@@ -156,7 +155,7 @@ def webhook():
         rr,
         "斜率+OB+H1趨勢",
         news,
-        "",         # 結果暫留空白
+        "",  # 結果欄
         session
     ]
     write_to_sheet(row)
