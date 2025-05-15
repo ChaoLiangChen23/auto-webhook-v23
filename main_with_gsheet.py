@@ -4,14 +4,13 @@ import requests
 from flask import Flask, request, jsonify
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from sheet_utils import write_to_sheet  # ✅ 你已設定的 Google Sheet 寫入模組
 
 load_dotenv()
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "✅ Webhook server is running."
+    return "✅ Webhook server is running (BROADCAST ONLY VERSION)"
 
 def fetch_price(symbol):
     try:
@@ -69,7 +68,7 @@ def webhook():
     except Exception as e:
         return jsonify(error="JSON decode error", detail=str(e), raw=request.data.decode()), 400
 
-    # ✅ 中文欄位轉英文 key，並加上防呆處理
+    # 中文轉英文欄位（兼容模式）
     if "幣種" in params:
         params = {
             "symbol": params.get("幣種"),
@@ -144,23 +143,8 @@ def webhook():
 🔖 GPT-CORE (V23)
 """
     send_telegram(msg)
-
-    row = [
-        tw_time.strftime("%Y-%m-%d %H:%M:%S"),
-        display_symbol,
-        side,
-        price_note.replace("📡 ", "").replace("⚠️", "").replace("❗", ""),
-        round(entry_price, 2),
-        sl, tp1, tp2, tp3, tp4,
-        rr,
-        "斜率+OB+H1趨勢",
-        news,
-        "",  # 結果欄
-        session
-    ]
-    write_to_sheet(row)
-
     return jsonify(status="ok", message="✅ 廣播完成"), 200
 
 if __name__ == '__main__':
+    send_telegram("✅ Render 啟動完成，Telegram 廣播測試 OK")
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
